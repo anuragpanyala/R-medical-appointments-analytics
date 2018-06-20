@@ -1,0 +1,321 @@
+---
+title: "Medical Appointment Data Analytics"
+author: 'Aravind Diwakar : Anurag Panyala'
+date: "November 17, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## About the Project and Data
+
+First Let's talk a little bit about the data. The Data we have is a single CSV file that contains some information about patients and more importantly information about their medical appointment. The dataset comprises of 300k medical appointments of the public healthcare of the capital city of Espirito Santo State, Vitoria, Brazil and its 15 variables/characteristics of each. It also contains information about weather or not the patient showed up for their scheduled appointments.
+
+## The R part
+Let's Start with some R analysis to see what factors seem to be influencing no-show for the appointments. 
+
+## Loading Libraries as needed
+
+Here we are going to begin to load libraries as and when we need them.
+
+```{r}
+#install.packages('plyr')
+#install.packages('dplyr')
+#install.packages('ggplot2')
+#install.packages('stringr')
+#install.packages('scales')
+#install.packages('tidyr')
+#install.packages('lubridate')
+#install.packages('gridExtra')
+#install.packages('lattice')
+#install.packages('caret')
+#install.packages('grid')
+#install.packages('rpart')
+#install.packages('rpart.plot')
+#install.packages('RColorBrewer')
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(scales)
+library(tidyr)
+library(lubridate)
+library(gridExtra)
+library(grid)
+library(lattice)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+```
+
+## Loading Data into Data frame
+```{r}
+#First we read the .csv file into a dataframe called rawdata
+rawdata <- read.table("No-show-Issue-Comma-300k.csv", header=TRUE, sep=",", stringsAsFactors=TRUE)
+#The raw data is then loaded into the 'newdata' dataframe, this is the dataframe which we'll be using
+newdata <- rawdata
+```
+
+## Exploratory Data Analysis
+```{r}
+#Checking the structure of the dataframe
+str(newdata)
+```
+
+## Next we change the data types of various fields.
+
+```{r}
+#Changing date columns to date datatype
+newdata$AppointmentRegistration <- ymd_hms(newdata$AppointmentRegistration)
+newdata$ApointmentData <- ymd_hms(newdata$ApointmentData)
+
+#Changing logical columns to logical datatype
+newdata$Diabetes <- as.logical(newdata$Diabetes)
+newdata$Alcoolism <- as.logical(newdata$Alcoolism)
+newdata$HiperTension <- as.logical(newdata$HiperTension)
+newdata$Smokes <- as.logical(newdata$Smokes)
+newdata$Scholarship <- as.logical(newdata$Scholarship)
+newdata$Tuberculosis <- as.logical(newdata$Tuberculosis)
+newdata$Sms_Reminder <- as.logical(newdata$Sms_Reminder)
+```
+
+```{r}
+#Re-checking the structre of the dataframe
+str(newdata)
+```
+
+Note: Handcap is the total number of disabilities a person presents, it is not binary.
+
+```{r}
+#Getting some summary stats
+summary(newdata)
+```
+
+By looking at the above summary it can be inferred that the variable Age has some inconsistent values/outliers.
+
+```{r}
+summary(newdata$Age < 0)
+```
+
+There appear to be only 6 inconsistent values/outliers for Age.
+This is a very small value of outliers when compared to the entire dataset, so we go ahead without making any changes to the Age variable.
+
+## Plotting No-Show vs Show-Up
+```{r}
+gg_bar_status <- ggplot() + geom_bar(data = newdata, aes(x=Status, fill=Status)) + ggtitle("No-Show VS Show")
+gg_bar_status
+```
+
+From the above graph it can be inferred that from the 300K medical appointements made, there were atleast 90K (30%) no-shows.
+
+## Let's Analyze to see if no-show depends on Age of the patient
+```{r}
+gg_hist_age <- ggplot(newdata, aes(x=Age)) + geom_histogram(bins = 50)
+gg_box_status_age <- ggplot(newdata, aes(x=Status, y=Age, col=Status)) + geom_boxplot()
+grid.arrange(gg_hist_age, gg_box_status_age,ncol=2, top='Does no-show depend on Age?')
+```
+
+From the above graphs it can be inferred that younger patients are more likely to not show up for their mdeical appointement.
+
+##Let's Analyze to see if no-show depends on Gender of the patient
+```{r}
+gg_bar_gender <- ggplot(newdata, aes(x=Gender, fill=Gender)) + geom_bar()
+gg_bar_gender_status <- ggplot(newdata, aes(x=Gender, fill=Status)) + geom_bar(position = "fill")
+grid.arrange(gg_bar_gender, gg_bar_gender_status,ncol=2, top='Does no-show depend on Gender?')
+```
+
+By looking at the above bar plot on the left it can be inferred that, the number of female patients are almost double in number when compared to the male patients.
+By looking at the above bar plot on the right it can be inferred that, the patient's gender doesn't have much of an impact on showing up for an appointment.
+
+##Counting appointments by Day Of The Week
+```{r}
+gg_bar_dayoftheweek <- ggplot(newdata, aes(x=DayOfTheWeek, fill=DayOfTheWeek)) + geom_bar() + ggtitle("Count of Patients by Day Of The Week")
+gg_bar_dayoftheweek
+```
+
+By looking at the above graph it can be inferred that, there are almost negligible number of appointments scheduled for the weekend. The doctor's office might be closed on weekends and only emergencies might be scheduled for the weekends. Apart from the weekends, Friday seems to have the least number of appointments.
+
+##Let's Analyze to see if no-show depends on Day Of The Week of the appointment
+```{r}
+gg_bar_dayoftheweek <- ggplot(newdata, aes(x=DayOfTheWeek, fill=Status)) + geom_bar(position = "fill") + ggtitle("Does No-Show depend on Day Of The Week?")
+gg_bar_dayoftheweek
+```
+
+By looking at the above graph and not taking weekends into consideration it can be inferred that, Mondays and Fridays seem to have higher no show rates. Since Friday also has the least number of appointments (except weekends) and a higher rate of no show when compared to other days, it can be inferred that Friday has the highest no show rate of all days of the week.
+
+## Let's Analyze to see if no-show depends on Sms Reminder being sent
+```{r}
+gg_bar_smsreminder <- ggplot(newdata, aes(x=Sms_Reminder, fill=Status)) + geom_bar(position = "fill") + ggtitle("Does No-Show depend on Sms Reminder being sent?")
+gg_bar_smsreminder
+```
+
+By looking at the above graph it can be inferred that, sending patients an sms reminding them of their appointment doesn't have much of an impact on the no show rate.
+
+## Let's Analyze to see if no-show depends on a patient's habits and medical conditions
+```{r}
+gg_bar_diabetes <- ggplot(newdata, aes(x=Diabetes, fill=Status)) + geom_bar(position = "fill")
+gg_bar_alcoolism <- ggplot(newdata, aes(x=Alcoolism, fill=Status)) + geom_bar(position = "fill")
+gg_bar_hipertension <- ggplot(newdata, aes(x=HiperTension, fill=Status)) + geom_bar(position = "fill")
+gg_bar_smokes <- ggplot(newdata, aes(x=Smokes, fill=Status)) + geom_bar(position = "fill")
+gg_bar_scholarship <- ggplot(newdata, aes(x=Scholarship, fill=Status)) + geom_bar(position = "fill")
+gg_bar_tuberculosis <- ggplot(newdata, aes(x=Tuberculosis, fill=Status)) + geom_bar(position = "fill")
+grid.arrange(gg_bar_diabetes, gg_bar_alcoolism,gg_bar_hipertension, gg_bar_smokes, gg_bar_scholarship, gg_bar_tuberculosis, ncol=2, top='Does no-show depend on a patient s habits and medical conditions?')
+```
+
+The following inferences can be made with the help of the above bar plots:
+
+Diabetes: Patients with diabetes have a higer rate of showing up for their medical appointment.
+
+Alcoolism: Patients suffering from alcoholism have a much higher rate of not showing up.
+
+HiperTension: Patients with hypertension appear to have a higher rate of showing up.
+
+Smokes: Patients who are also smokers have a higher rate of not showing up for their appointments.
+
+Scholarship: Scholarship/Bolsa Família (Portuguese pronunciation: [ˈbowsɐ fɐˈmiʎɐ], Family Allowance) is a social welfare program of the Brazilian government. It can be seen that patients who have inrolled in this welfare program are more likely to not show up for their mdeical appointment. 
+
+Tuberculosis: Patients suffering from tuberculosis are more likely to not show up for their medical appointment.
+
+## Building Models
+
+# Splitting data into Test and Training dataframes
+```{r}
+#Creating a 70/30 split for training and test data
+set.seed(1592)
+testrecs <- sample(nrow(newdata),0.3 * nrow(newdata))
+newdata_test <- newdata[testrecs,]
+newdata_train <- newdata[-testrecs,]
+```
+
+```{r}
+# trainControl is used to control the computational nuances of the train function
+fitControl <- trainControl(method = "cv",
+                           number = 5,
+                           #savePredictions="final",
+                           summaryFunction = twoClassSummary,
+                           classProbs = TRUE
+                           )
+```
+
+##Logistic Regression
+
+## Model 1
+
+We first start by building a model with all the variables in it
+
+```{r}
+train_glm1 <- train(Status~., 
+                   newdata_train,
+                   method = "glm",
+                   metric = "ROC",
+                   preProc = c("center", "scale"),
+                   trControl = fitControl)
+
+summary(train_glm1)
+```
+
+There are 5 terms that are insignificant in the above logistic regression model
+
+## Model 2
+
+Now we remove some of the insignificant terms (p < 0.05) and try new models
+
+```{r}
+train_glm2 <- train(Status~.-AppointmentRegistration-ApointmentData-Diabetes-Handcap, 
+                   newdata_train,
+                   method = "glm",
+                   metric = "ROC",
+                   preProc = c("center", "scale"),
+                   trControl = fitControl)
+
+summary(train_glm2)
+```
+
+There are still 3 insignificant terms left in the above model
+
+## Model 3
+
+Next we try different combinations of interaction terms and use one that is significant
+
+```{r}
+train_glm3 <- train(Status~.+Smokes*HiperTension-AppointmentRegistration-ApointmentData-Diabetes-Handcap-Gender-Tuberculosis-DayOfTheWeek, 
+                   newdata_train,
+                   method = "glm",
+                   metric = "ROC",
+                   preProc = c("center", "scale"),
+                   trControl = fitControl)
+
+summary(train_glm3)
+```
+
+## Making predictions on the test data
+
+## Predictions based on model 1
+
+```{r}
+test_glm1 <- predict(train_glm1, newdata_test)
+```
+
+## Predictions based on model 2
+
+```{r}
+test_glm2 <- predict(train_glm2, newdata_test)
+```
+
+## Predictions based on model 3
+
+```{r}
+test_glm3 <- predict(train_glm3, newdata_test)
+```
+
+## Checking performance of prediction models
+
+## Confusion matrix for model 1
+
+```{r}
+cm1 <- confusionMatrix(test_glm1, newdata_test$Status, positive = "YES")
+cm1
+```
+
+We use accuracy to check the overall performance of our model. Accuracy is defined as overall, how often is the classifier correct.
+The above model's accuracy is 69.85%
+
+## Confusion matrix for model 2
+
+```{r}
+cm2 <- confusionMatrix(test_glm2, newdata_test$Status, positive = "YES")
+cm2
+```
+
+The above model's accuracy is 69.87%
+
+## Confusion matrix for model 3
+
+```{r}
+cm3 <- confusionMatrix(test_glm3, newdata_test$Status, positive = "YES")
+cm3
+```
+
+The above model's accuracy is 69.86%
+
+All three models have very similar accuracies.
+Model 2 and 3 are slightly better as they have less terms/variables that are insignificant.
+
+## Conclusion
+The primary goal of our project was to analyze historical data related to patients and their medical appointments to try to understand why almost 30% of the patients do not show up for their pre-scheduled medical appointment.
+
+The various variables in the dataset were analyzed visually with the help of histograms, bar graphs and box plots. This gave us a better understanding about the impact of various variables on weather a patient shows up for their appointment or not.
+
+The entire dataset then split into train and test datasets.
+
+Logistic regression models were built on the train dataset and predictions were made on the test dataset. The models were then compared with the help of confusion matrices and with accuracy as the performance metric.
+
+Overall we found that these were the variables that had the most impact on whether a patient shows up for their pre-scheduled appointment or not:
+Age
+Scholarship
+AwaitingTime
+Alcoholism
+Smokes
